@@ -21,6 +21,7 @@ import yaml
 from .config import CONFIG_PATH, ROOT, STORES_PATH, Config, Secrets, load_config
 from .notify import TIMEOUT, format_status_report, send_telegram
 from .run import collect_buyable
+from .store_discovery import add_area_and_refresh, clear_areas_and_refresh, config_areas
 
 log = logging.getLogger(__name__)
 
@@ -138,6 +139,59 @@ def _set_radius(args: list[str]) -> str:
     return f"Suchradius auf {radius:.0f} km gesetzt."
 
 
+def _area_command(args: list[str]) -> str:
+    if len(args) < 2:
+        return (
+            "Syntax:\n"
+            "/area <Ort> <Radius-km>\n\n"
+            "Beispiele:\n"
+            "/area Graz 25\n"
+            "/area Wien 40\n"
+            "/area Bruck an der Mur 35"
+        )
+    radius_text = args[-1]
+    place = " ".join(args[:-1]).strip()
+    try:
+        radius = float(radius_text.replace(",", "."))
+    except ValueError:
+        return "Radius muss eine Zahl sein, z.B. /area Graz 25."
+    if radius <= 0 or radius > 500:
+        return "Radius muss zwischen 1 und 500 km liegen."
+    if not place:
+        return "Ort fehlt."
+
+    try:
+        area, stores = add_area_and_refresh(place, radius)
+    except Exception as exc:  # noqa: BLE001 - bot response should explain the failure
+        log.exception("Area refresh failed")
+        return f"Area konnte nicht gesetzt werden: {html.escape(str(exc))}"
+
+    lines = [
+        f"Area gesetzt: {html.escape(area.name)} ({area.radius_km:.0f} km)",
+        f"Automatisch gefundene MediaMarkt-Filialen: {len(stores)}",
+    ]
+    for store in stores[:20]:
+        lines.append(f"• {html.escape(store.name)} (ID {html.escape(store.id)}, ~{store.distance_km:.0f} km)")
+    if len(stores) > 20:
+        lines.append(f"... plus {len(stores) - 20} weitere.")
+    return "\n".join(lines)
+
+
+def _areas_command() -> str:
+    areas = config_areas()
+    if not areas:
+        return "Keine Areas konfiguriert. Nutze /area <Ort> <Radius-km>."
+    lines = ["<b>Konfigurierte Areas</b>"]
+    for area in areas:
+        lines.append(f"• {html.escape(area.name)} ({area.radius_km:.0f} km)")
+    return "\n".join(lines)
+
+
+def _clear_areas_command() -> str:
+    clear_areas_and_refresh()
+    return "Alle Areas und automatisch gefundenen MediaMarkt-Stores wurden entfernt."
+
+
 def _stores_report(cfg: Config) -> str:
     loc = cfg.location
     lines = [
@@ -243,6 +297,64 @@ def _set_commands(secrets: Secrets) -> bool:
     return True
 
 
+def _status_report(cfg: Config) -> str:
+    products = "\n".join(
+        f"• {html.escape(p.name)} bis <b>{p.max_price:.2f} EUR</b>" for p in cfg.products
+    )
+    sources = ", ".join(html.escape(s) for s in cfg.enabled_sources())
+    return (
+        "✅ <b>MideaHavara laeuft</b>\n\n"
+        f"<b>Produkte</b>\n{products}\n\n"
+        f"<b>Aktive Quellen</b>\n{sources}\n\n"
+        "Kommandos:\n"
+        "/stores - Shops und Filialen anzeigen\n"
+        "/check - echten Live-Check ausfuehren und Ergebnis senden\n"
+        "/area - Ort + Radius setzen und Stores automatisch finden\n"
+        "/areas - konfigurierte Areas anzeigen\n"
+        "/clearareas - Areas und Stores leeren\n"
+        "/test - Antworttest senden\n"
+        "/help - Hilfe anzeigen"
+    )
+
+
+def _help_text() -> str:
+    return (
+        "<b>MideaHavara Bot</b>\n\n"
+        "/status - schnelle Statusuebersicht\n"
+        "/stores - aktive Quellen und MediaMarkt-Filialen\n"
+        "/check - Live-Check ausfuehren und Ergebnis melden\n"
+        "/area <Ort> <Radius-km> - Stores automatisch finden\n"
+        "/areas - konfigurierte Areas anzeigen\n"
+        "/clearareas - Areas und Stores leeren\n"
+        "/test - Bot-Antwort testen\n"
+        "/help - diese Hilfe"
+    )
+
+
+def _set_commands(secrets: Secrets) -> bool:
+    if not secrets.telegram_configured:
+        log.error("Telegram nicht konfiguriert.")
+        return False
+    url = COMMANDS_API.format(token=secrets.telegram_bot_token)
+    commands = [
+        {"command": "status", "description": "Schnelle Statusuebersicht"},
+        {"command": "stores", "description": "Shops und Filialen anzeigen"},
+        {"command": "check", "description": "Live-Check ausfuehren"},
+        {"command": "area", "description": "Ort und Radius setzen"},
+        {"command": "areas", "description": "Konfigurierte Areas anzeigen"},
+        {"command": "clearareas", "description": "Areas und Stores leeren"},
+        {"command": "test", "description": "Antworttest senden"},
+        {"command": "help", "description": "Hilfe anzeigen"},
+    ]
+    resp = requests.post(url, json={"commands": commands}, timeout=TIMEOUT)
+    resp.raise_for_status()
+    data = resp.json()
+    if not data.get("ok"):
+        log.error("Telegram setMyCommands failed: %s", data)
+        return False
+    return True
+
+
 def _handle_command(cfg: Config, secrets: Secrets, command: str, message_id: int, text: str = "") -> None:
     if command in {"", "/help", "/start"}:
         send_telegram(_help_text(), secrets, reply_to_message_id=message_id)
@@ -252,6 +364,20 @@ def _handle_command(cfg: Config, secrets: Secrets, command: str, message_id: int
         return
     if command == "/stores":
         send_telegram(_stores_report(cfg), secrets, reply_to_message_id=message_id)
+        return
+    if command == "/area":
+        send_telegram(
+            "⏳ Suche MediaMarkt-Filialen fuer diese Area. Das kann kurz dauern.",
+            secrets,
+            reply_to_message_id=message_id,
+        )
+        send_telegram(_area_command(_command_args(text)), secrets, reply_to_message_id=message_id)
+        return
+    if command == "/areas":
+        send_telegram(_areas_command(), secrets, reply_to_message_id=message_id)
+        return
+    if command == "/clearareas":
+        send_telegram(_clear_areas_command(), secrets, reply_to_message_id=message_id)
         return
     if command == "/addstore":
         send_telegram(_add_mediamarkt_store(_command_args(text)), secrets, reply_to_message_id=message_id)

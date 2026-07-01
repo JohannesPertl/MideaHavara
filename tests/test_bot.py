@@ -1,5 +1,16 @@
-from tracker.bot import _add_mediamarkt_store, _command_args, _command_from_text, _remove_mediamarkt_store, _set_radius, _stores_report
+from tracker.bot import (
+    _add_mediamarkt_store,
+    _area_command,
+    _areas_command,
+    _clear_areas_command,
+    _command_args,
+    _command_from_text,
+    _remove_mediamarkt_store,
+    _set_radius,
+    _stores_report,
+)
 from tracker.config import Config, Location, Product, Store
+from tracker.store_discovery import Area, DiscoveredStore
 
 
 def _cfg() -> Config:
@@ -62,3 +73,31 @@ def test_set_radius_updates_config(monkeypatch, tmp_path):
 
     assert "80 km" in msg
     assert "radius_km: 80.0" in config_path.read_text(encoding="utf-8")
+
+
+def test_area_command_discovers_stores(monkeypatch):
+    def fake_add_area(place, radius):
+        assert place == "Bruck an der Mur"
+        assert radius == 35
+        return (
+            Area("Bruck an der Mur, Steiermark", 47.41, 15.27, 35),
+            [DiscoveredStore("123", "Bruck Store", 47.4, 15.3, 4.2)],
+        )
+
+    monkeypatch.setattr("tracker.bot.add_area_and_refresh", fake_add_area)
+
+    msg = _area_command(["Bruck", "an", "der", "Mur", "35"])
+
+    assert "Area gesetzt" in msg
+    assert "Bruck Store" in msg
+    assert "ID 123" in msg
+
+
+def test_areas_and_clear_commands(monkeypatch):
+    monkeypatch.setattr("tracker.bot.config_areas", lambda: [Area("Graz", 47.0, 15.0, 25)])
+    cleared = {"ok": False}
+    monkeypatch.setattr("tracker.bot.clear_areas_and_refresh", lambda: cleared.__setitem__("ok", True))
+
+    assert "Graz" in _areas_command()
+    assert "entfernt" in _clear_areas_command()
+    assert cleared["ok"] is True
