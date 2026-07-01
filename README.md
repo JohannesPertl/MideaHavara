@@ -109,8 +109,21 @@ Supported Telegram commands:
 - `/status` - quick tracker summary
 - `/stores` - active shops and MediaMarkt stores
 - `/check` - run a live check and send the result
+- `/addstore <id> <lat> <lon> <name>` - add or update a MediaMarkt store
+- `/removestore <id>` - remove a MediaMarkt store
+- `/radius <km>` - change the store-distance radius
 - `/test` - reply test
 - `/help` - command list
+
+Example:
+
+```text
+/addstore 672 47.0617 15.4167 Graz Lazarettguertel
+/radius 80
+```
+
+Store IDs come from the final number in the MediaMarkt store URL. Coordinates
+are needed because store offers outside the configured radius are filtered out.
 
 Useful commands:
 

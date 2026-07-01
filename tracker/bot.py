@@ -16,8 +16,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+import yaml
 
-from .config import ROOT, Config, Secrets, load_config
+from .config import CONFIG_PATH, ROOT, STORES_PATH, Config, Secrets, load_config
 from .notify import TIMEOUT, format_status_report, send_telegram
 from .run import collect_buyable
 
@@ -47,6 +48,94 @@ def _command_from_text(text: str) -> str:
     if not first.startswith("/"):
         return ""
     return first.split("@", 1)[0]
+
+
+def _command_args(text: str) -> list[str]:
+    parts = text.strip().split()
+    return parts[1:]
+
+
+def _load_yaml(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_yaml(path: Path, data: dict) -> None:
+    path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+def _add_mediamarkt_store(args: list[str]) -> str:
+    if len(args) < 4:
+        return (
+            "Syntax:\n"
+            "/addstore <id> <lat> <lon> <name>\n\n"
+            "Beispiel:\n"
+            "/addstore 672 47.0617 15.4167 Graz Lazarettguertel"
+        )
+    store_id, lat_text, lon_text = args[0], args[1], args[2]
+    name = " ".join(args[3:]).strip()
+    try:
+        lat = float(lat_text.replace(",", "."))
+        lon = float(lon_text.replace(",", "."))
+    except ValueError:
+        return "Lat/Lon muessen Zahlen sein, z.B. 47.0617 15.4167."
+    if not store_id.isdigit():
+        return "Store-ID muss numerisch sein."
+    if not name:
+        return "Store-Name fehlt."
+
+    data = _load_yaml(STORES_PATH)
+    stores = list(data.get("mediamarkt") or [])
+    replacement = {"id": store_id, "name": name, "lat": lat, "lon": lon}
+    updated = False
+    for i, store in enumerate(stores):
+        if str((store or {}).get("id")) == store_id:
+            stores[i] = replacement
+            updated = True
+            break
+    if not updated:
+        stores.append(replacement)
+    data["mediamarkt"] = stores
+    for chain in ("saturn", "obi", "bauhaus", "hornbach"):
+        data.setdefault(chain, [])
+    _save_yaml(STORES_PATH, data)
+
+    action = "aktualisiert" if updated else "hinzugefuegt"
+    return f"MediaMarkt-Store {name} (ID {store_id}) {action}."
+
+
+def _remove_mediamarkt_store(args: list[str]) -> str:
+    if len(args) != 1:
+        return "Syntax: /removestore <id>"
+    store_id = args[0]
+    data = _load_yaml(STORES_PATH)
+    stores = list(data.get("mediamarkt") or [])
+    kept = [s for s in stores if str((s or {}).get("id")) != store_id]
+    if len(kept) == len(stores):
+        return f"Kein MediaMarkt-Store mit ID {store_id} gefunden."
+    data["mediamarkt"] = kept
+    _save_yaml(STORES_PATH, data)
+    return f"MediaMarkt-Store ID {store_id} entfernt."
+
+
+def _set_radius(args: list[str]) -> str:
+    if len(args) != 1:
+        return "Syntax: /radius <km>, z.B. /radius 80"
+    try:
+        radius = float(args[0].replace(",", "."))
+    except ValueError:
+        return "Radius muss eine Zahl sein."
+    if radius <= 0 or radius > 500:
+        return "Radius muss zwischen 1 und 500 km liegen."
+
+    data = _load_yaml(CONFIG_PATH)
+    location = dict(data.get("location") or {})
+    location["radius_km"] = radius
+    data["location"] = location
+    _save_yaml(CONFIG_PATH, data)
+    return f"Suchradius auf {radius:.0f} km gesetzt."
 
 
 def _stores_report(cfg: Config) -> str:
@@ -95,6 +184,9 @@ def _status_report(cfg: Config) -> str:
         "Kommandos:\n"
         "/stores - Shops und Filialen anzeigen\n"
         "/check - echten Live-Check ausführen und Ergebnis senden\n"
+        "/addstore - MediaMarkt-Store hinzufuegen\n"
+        "/removestore - MediaMarkt-Store entfernen\n"
+        "/radius - Suchradius setzen\n"
         "/test - Antworttest senden\n"
         "/help - Hilfe anzeigen"
     )
@@ -106,6 +198,9 @@ def _help_text() -> str:
         "/status - schnelle Statusübersicht\n"
         "/stores - aktive Quellen und MediaMarkt-Filialen\n"
         "/check - Live-Check ausführen und Ergebnis melden\n"
+        "/addstore <id> <lat> <lon> <name> - MediaMarkt-Store hinzufuegen\n"
+        "/removestore <id> - MediaMarkt-Store entfernen\n"
+        "/radius <km> - Suchradius setzen\n"
         "/test - Bot-Antwort testen\n"
         "/help - diese Hilfe"
     )
@@ -133,6 +228,9 @@ def _set_commands(secrets: Secrets) -> bool:
         {"command": "status", "description": "Schnelle Statusuebersicht"},
         {"command": "stores", "description": "Shops und Filialen anzeigen"},
         {"command": "check", "description": "Live-Check ausfuehren"},
+        {"command": "addstore", "description": "MediaMarkt-Store hinzufuegen"},
+        {"command": "removestore", "description": "MediaMarkt-Store entfernen"},
+        {"command": "radius", "description": "Suchradius setzen"},
         {"command": "test", "description": "Antworttest senden"},
         {"command": "help", "description": "Hilfe anzeigen"},
     ]
@@ -145,7 +243,7 @@ def _set_commands(secrets: Secrets) -> bool:
     return True
 
 
-def _handle_command(cfg: Config, secrets: Secrets, command: str, message_id: int) -> None:
+def _handle_command(cfg: Config, secrets: Secrets, command: str, message_id: int, text: str = "") -> None:
     if command in {"", "/help", "/start"}:
         send_telegram(_help_text(), secrets, reply_to_message_id=message_id)
         return
@@ -154,6 +252,15 @@ def _handle_command(cfg: Config, secrets: Secrets, command: str, message_id: int
         return
     if command == "/stores":
         send_telegram(_stores_report(cfg), secrets, reply_to_message_id=message_id)
+        return
+    if command == "/addstore":
+        send_telegram(_add_mediamarkt_store(_command_args(text)), secrets, reply_to_message_id=message_id)
+        return
+    if command == "/removestore":
+        send_telegram(_remove_mediamarkt_store(_command_args(text)), secrets, reply_to_message_id=message_id)
+        return
+    if command == "/radius":
+        send_telegram(_set_radius(_command_args(text)), secrets, reply_to_message_id=message_id)
         return
     if command == "/test":
         send_telegram(
@@ -214,7 +321,7 @@ def poll_once() -> int:
         command = _command_from_text(text)
         if command:
             log.info("Telegram-Kommando: %s", command)
-            _handle_command(cfg, secrets, command, message_id)
+            _handle_command(cfg, secrets, command, message_id, text)
 
     if max_update_id is not None:
         state["telegram_update_offset"] = max_update_id + 1
