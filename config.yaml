@@ -1,74 +1,53 @@
-# Konfiguration des Verfügbarkeits-Trackers. Anpassbar ohne Code-Änderung.
+# Local configuration for the availability tracker.
 #
-# Die Watchlist (products) kann beliebig viele Geräte enthalten – jeder
-# Eintrag bringt seine eigenen Shop-URLs mit. Die globalen Blöcke
-# (location, sources) gelten für alle Produkte.
+# This checkout is configured for Graz, Austria and for local execution
+# (for example from a Raspberry Pi systemd timer), not GitHub Actions.
 
 products:
   - name: "Midea PortaSplit 12.000 BTU"
-    # Strikter Anker, damit nie das falsche/zu teure Gerät matcht.
-    # Bestätigte EAN der gesuchten Midea PortaSplit 12.000 BTU.
+    # Confirmed EAN for the Midea/Comfee PortaSplit 12.000 BTU model.
     eans:
       - "4048164116478"
-    # Schlüsselwörter für den Fallback-Titelabgleich, falls eine Quelle keine
-    # EAN liefert. ALLE müssen (case-insensitiv) im Titel vorkommen.
+    # Fallback title match if a source does not expose an EAN.
     title_must_include:
       - "portasplit"
-    # Hinweis: Das Zielgerät (EAN 4048164116478) IST Comfee-gebrandet
-    # ("Midea Comfee PortaSplit"), daher KEIN comfee-Ausschluss. Der EAN-Abgleich
-    # ist der starke Anker; ohne EAN greift der Titel ("portasplit").
     title_must_exclude: []
-    max_price: 1000.0  # EUR – nur Angebote darunter lösen aus
-    allow_used: true  # Amazon Warehouse / gebrauchte Artikel erlauben
-    # Pro Quelle die direkte Produkt-URL. Leere/fehlende Werte = übersprungen.
+    max_price: 1000.0
+    allow_used: true
     urls:
-      geizhals: "https://geizhals.de/midea-comfee-portasplit-v233573.html"
-      idealo: "https://www.idealo.de/preisvergleich/OffersOfProduct/204374464_-portasplit-3-5-kw-midea.html"
+      geizhals: "https://geizhals.at/midea-comfee-portasplit-v233573.html"
       mediamarkt: "https://www.mediamarkt.at/de/product/_midea-portasplit-mobile-klimaanlage-max-raumgrosse-42-m-eek-a-12000-btuh-weiss-2075674.html"
-      saturn: "https://www.saturn.de/de/product/_midea-porta-split-klimaanlage-grau-max-raumgrosse-42-m-eek-a-142245268.html"
       obi: "https://www.obi.at/p/3586245/midea-mobile-split-klimaanlage-portasplit"
       bauhaus: "https://www.bauhaus.at/p/31934233"
-      hornbach: "https://www.hornbach.de/p/klimasplitgeraet-midea-portasplit-12-000-btu-105-m-weiss/12356554/"
+      # Keep the remaining URLs documented but disabled below. Enable only after
+      # checking that the page still exposes reliable product data.
+      idealo: ""
+      saturn: ""
+      hornbach: ""
       amazon: "https://www.amazon.de/dp/B0D3PP64JS"
-      # Direktvertrieb (JTL-Shop). Bei Fetch-Zeitpunkt: 857,00 €, "Momentan
-      # nicht verfügbar" (Vorbesteller) – kein EAN aus der Seite ablesbar,
-      # daher matcht hier primär der Titel ("portasplit").
       greensun: "https://www.greensun-germany.com/MIDEA-PortaSplit-35-kW-Mobile-Split-Klimaanlage-Kuehlen-Heizen-ohne-feste-Installation"
 
-  # Weiteres Gerät? Einfach einen zweiten Eintrag nach demselben Muster anlegen:
-  # - name: "Beispiel-Klimagerät"
-  #   eans:
-  #     - "0000000000000"
-  #   title_must_include:
-  #     - "beispiel"
-  #   title_must_exclude: []
-  #   max_price: 600.0
-  #   allow_used: false
-  #   urls:
-  #     idealo: "https://www.idealo.de/preisvergleich/OffersOfProduct/…"
-
 location:
-  postal_code: "74321"
-  city: "Bietigheim-Bissingen"
-  latitude: 48.9543
-  longitude: 9.1316
-  radius_km: 25  # Umkreis für Filial-Verfügbarkeit
+  postal_code: "8010"
+  city: "Graz"
+  latitude: 47.0707
+  longitude: 15.4395
+  radius_km: 25
 
-# Quellen ein-/ausschalten. Schlüssel entsprechen den Adapter-Namen.
+# Source switches. Disabled sources are skipped even when a URL is present.
 sources:
-  geizhals: false
-  idealo: false
+  geizhals: true
   mediamarkt: true
-  saturn: false
   obi: true
   bauhaus: true
+  idealo: false
+  saturn: false
   hornbach: false
   amazon: false
   greensun: false
 
-# Tägliche "lebt noch"-Statusmeldung via Telegram (günstigster Preis je Gerät,
-# Quellen mit Daten). Zusätzlich ein Sofort-Alarm bei Totalausfall (keine
-# einzige Quelle lieferte Daten). Beides ist auf max. 1x/Tag entprellt.
+# Daily status message plus at-most-daily total-outage alert via Telegram.
+# 6 UTC is 08:00 in Austria during daylight saving time.
 heartbeat:
   enabled: true
-  hour_utc: 6  # erste Meldung am/nach dieser UTC-Stunde (6 ≈ 8 Uhr MESZ)
+  hour_utc: 6

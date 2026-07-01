@@ -1,200 +1,108 @@
-# Midea PortaSplit 12.000 BTU – Verfügbarkeits-Tracker
+# MideaHavara
 
-⚠️ **Es handelt sich hier um eine modifizerte Version von diesem Projekt https://github.com/bhipfl/Midea-tracker/**)
-Quellen für Mediamarkt, Obi und Bauhaus wurden auf die österreichische URL getauscht und alle anderen Quellen im config.yaml deaktiviert. Greensun Germany wurde hinzugefügt, da die über Ali auch hunderte verkaufen, aber Ali so wie Amazon und Idealo schwierig automatisiert zu checken sind.
+Availability tracker for the Midea/Comfee PortaSplit 12.000 BTU, adapted for
+Graz, Austria and local Raspberry Pi operation.
 
-Prüft alle ~10 Minuten automatisch mehrere Quellen auf ein **wirklich
-bestellbares** Angebot der **Midea PortaSplit 12.000 BTU** (EAN
-`4048164116478`) unter **1000 €** – online **und** in Märkten im **25-km-Umkreis
-von 74321 Bietigheim-Bissingen** – und schickt bei einer **neuen
-Verfügbarkeit** eine **Telegram-Push** mit direktem Kauf-Link.
+The tracker checks configured shop/product pages, filters for the right product
+and max price, avoids repeated alerts via `state.json`, and sends Telegram
+notifications when a new buyable offer appears.
 
-Läuft kostenlos über **GitHub Actions** – kein eigener Server, keine App-
-Installation nötig (außer Telegram auf dem Handy).
+## Current Setup
 
-## Wie es funktioniert
+- Location: Graz, `8010`, 25 km radius.
+- Product: Midea PortaSplit 12.000 BTU, EAN `4048164116478`.
+- Price limit: `1000.0` EUR.
+- Enabled sources: Geizhals AT, MediaMarkt AT, OBI AT, BAUHAUS AT.
+- Disabled sources: Idealo, Saturn, Hornbach, Amazon, Greensun.
+- GitHub Actions: removed.
 
-```
-GitHub Actions (alle 10 Min)
-  → Quellen abfragen (Geizhals/Idealo, MediaMarkt/Saturn, OBI/Bauhaus/Hornbach, Amazon + Warehouse)
-  → Filter "nur wirklich bestellbar"
-  → Diff gegen letzten Lauf (kein Spam)
-  → Telegram-Push bei neuem Treffer
-```
+The main settings are in `config.yaml`. Store IDs for Graz-area MediaMarkt
+stores are in `stores.yaml`.
 
-### Filter „nur wirklich bestellbar"
-Ein Angebot alarmiert nur, wenn **alle** Bedingungen erfüllt sind
-(`tracker/matching.py` + `tracker/sources/buyability.py`):
-1. **Richtiges Produkt** – EAN `4048164116478` (oder, ohne EAN, Titelabgleich
-   auf „portasplit"). Hinweis: Das Gerät ist Comfee-gebrandet („Midea Comfee
-   PortaSplit"), daher wird „comfee" **nicht** ausgeschlossen.
-2. **Wirklich online bestellbar** – strenge Prüfung: nur strukturiertes
-   schema.org `InStock`/`OnlineOnly` zählt. `InStoreOnly` (nur im Markt
-   vorrätig) zählt **nicht**; negative Marker („ausverkauft", „nur im Markt",
-   „nicht verfügbar") sind ein Veto; generische Seitentexte wie „in den
-   Warenkorb" gelten **nicht** als Beweis. Lieber ein Deal verpasst als ein
-   Pseudo-Alarm (nächster Check in 10 Min).
-3. **Preis ≤ 800 €**.
-4. **Zustand** – neu immer; gebraucht (Amazon Warehouse) nur weil `allow_used: true`.
-5. **Filialen** – nur innerhalb von 25 km.
-
-### Shop-Abdeckung (Stand der Live-Tests)
-| Shop | Status |
-|---|---|
-| **OBI** | ✅ direkt erreichbar, sauberes schema.org → meldet bei echter Online-Verfügbarkeit (aktuell `InStoreOnly`) |
-| **MediaMarkt / Saturn** | ✅ eingebettetes JSON (an Produkt-ID gekoppelt) wird geparst → meldet bei echtem Direkt-Angebot < 800 €. Aktuell nur Marketplace-Angebot ~2.589 € (fällt korrekt raus) |
-| **Hornbach** | 🔓 Bot-Wall via Stealth-Browser überwunden (volle Seite), aber Preis/Verfügbarkeit werden erst per Client-API nachgeladen → bräuchte zusätzliches API-Parsing (zurückgestellt) |
-| **Bauhaus** | ⚠️ erreichbar, aber nur Analytics-Daten eingebettet → kein verlässliches Preis/Verfügbarkeits-Signal (zurückgestellt) |
-| **Geizhals** | ✅ kein JSON-LD, aber Bestpreis wird aus `og:title`/`gh_price` geparst (`tracker/sources/geizhals.py`) → meldet bei echtem Bestpreis < 800 € über alle gelisteten Shops |
-| **Idealo / Amazon** | ❌ hart geblockt (Bot-Wall hält auch mit Stealth, da Datacenter-IP) – bräuchte Residential-Proxy (zurückgestellt) |
-| **Greensun Germany (Ali)** | ⚠️  noch work in Progress, funktioniert evtl nicht verlässlich |
-
-**Stealth-Fähigkeit:** Der Browser-Fallback (`tracker/sources/base.py`) verschleiert
-Automations-Merkmale und löst JS-Challenges auf; `fetch_page()` erkennt auch
-HTTP-200-Bot-Walls. Damit ist Hornbach erreichbar und OBI/MediaMarkt/Saturn robuster.
-
-Diagnose jederzeit per Workflow **„Diagnose Shops"** (`inspect.yml`), Funktionstest
-der Push per **„Test-Alarm senden"** (`test-notify.yml`).
-
-### Heartbeat & Totalausfall-Alarm
-Damit kein stiller Ausfall unbemerkt bleibt, schickt der Tracker:
-- **1×/Tag** eine **„lebt noch"-Statusmeldung** (günstigster Preis je Gerät,
-  „Quellen mit Daten X/Y", Anzahl bestellbarer Treffer) – ab `heartbeat.hour_utc`.
-- einen **Sofort-Alarm bei Totalausfall**, wenn in einem Lauf **keine einzige**
-  Quelle Daten liefert (z.B. alle geblockt) – sonst entsteht falsche Sicherheit.
-
-Beides ist auf max. 1×/Tag entprellt (Datumsmarken in `state.json`) und in
-`config.yaml` unter `heartbeat:` ein-/ausschaltbar.
-
-### Tests / CI
-Die Test-Suite läuft netzwerkfrei (`python -m pytest -q`) und bei jedem Push/PR
-automatisch über den Workflow **CI (Tests)** (`.github/workflows/ci.yml`).
-
-## Einrichtung (einmalig)
-
-### 0. Dieses Repo in ein eigenes kopieren, alle Actions/Workflows wieder aktivieren falls Github sie abgedreht hat (evtl. forknetzwerk verlassen)
-
-### 1. Telegram-Bot anlegen
-1. In Telegram **@BotFather** öffnen → `/newbot` → Namen vergeben → du erhältst
-   einen **Bot-Token** (`123456:ABC...`).
-2. Schreibe deinem neuen Bot eine beliebige Nachricht (z.B. „hi").
-3. **Chat-ID ermitteln:** Öffne im Browser
-   `https://api.telegram.org/bot<DEIN_TOKEN>/getUpdates` und lies `chat.id` aus.
-
-### 2. GitHub Secrets hinterlegen
-Im Repo unter **Settings → Secrets and variables → Actions → New repository secret**:
-- `TELEGRAM_BOT_TOKEN` = dein Bot-Token
-- `TELEGRAM_CHAT_ID` = deine Chat-ID
-
-> Der Token liegt damit verschlüsselt bei GitHub, **nie** im Code. Daher kann
-> das Repo **öffentlich** sein → unbegrenzte Actions-Minuten für den 10-Min-Takt.
-> (Privates Repo: 2.000 Min/Monat – ggf. Intervall in `check.yml` auf `*/15` erhöhen.)
-
-### 3. Produkte & URLs eintragen (`config.yaml`)
-Die **Watchlist** (`products:`) kann beliebig viele Geräte enthalten – jeder
-Eintrag bringt seine eigenen Shop-URLs (`urls:`) mit. Die globalen Blöcke
-`location` und `sources` gelten für alle Produkte.
-
-```yaml
-products:
-  - name: "Midea PortaSplit 12.000 BTU"
-    eans: ["4048164116478"]
-    title_must_include: ["portasplit"]
-    title_must_exclude: ["comfee"]
-    max_price: 800.0
-    allow_used: true
-    urls:
-      idealo: "https://www.idealo.de/preisvergleich/OffersOfProduct/XXXXXXXX.html"
-      mediamarkt: "https://www.mediamarkt.de/de/product/_midea-portasplit-XXXXXXX.html"
-      obi: "https://www.obi.de/p/8620890/..."
-      amazon: "https://www.amazon.de/dp/B0D3PP64JS"
-  # - name: "Weiteres Gerät"
-  #   eans: ["..."]
-  #   ...
-  #   urls: { idealo: "..." }
-```
-
-> Leere/fehlende URLs werden je Produkt übersprungen. Quellen, die du gar nicht
-> nutzen willst, unter `sources:` auf `false` setzen. Das **alte Format**
-> (`product:` + globaler `source_urls:`-Block) wird weiterhin geladen.
-
-### 4. Filialen im Umkreis auflösen (`stores.yaml`, optional)
-Für **Filial-Bestand** bei MediaMarkt/Saturn die Märkte im 25-km-Umkreis
-(z.B. Ludwigsburg, Stuttgart) mit Koordinaten und ketteninterner **Store-ID**
-eintragen. `stores.yaml` ist mit den Filialen vorbefüllt – es fehlen nur die
-IDs:
-
-1. Store-Finder öffnen: `https://www.mediamarkt.de/de/storefinder`
-2. Filiale wählen; die Zahl am Ende der Store-URL (`…/store/<NAME>-<ID>`) ist
-   die ID → bei `id:` in `stores.yaml` eintragen.
-
-Ein Eintrag **ohne ID** ist erlaubt: die Filiale wird dann übersprungen (kein
-Fehlalarm), die Distanz aber bereits aus den Koordinaten berechnet. Ohne
-nutzbare Einträge wird nur die **Online-Verfügbarkeit** geprüft (die i.d.R.
-wichtigste).
-
-> **Status Filialbestand (best effort):** Die MediaMarkt/Saturn-Bestands-API
-> sitzt hinter einer WAF. Der Adapter ruft sie daher über eine echte
-> Browser-Session ab (`fetch_json_via_browser`) mit den korrekten PWA-Headern –
-> damit kommt er an der HTTP-403-Bot-Wall vorbei (verifiziert: API antwortet
-> 200). Der `persistedQuery`-Hash (`_AVAIL_QUERY_HASH` in
-> `tracker/sources/mediamarkt.py`) **rotiert mit jedem PWA-Release**; ist er
-> veraltet, kommt `PersistedQueryNotFound` und es gibt schlicht keinen
-> Filialtreffer. Aktuellen Hash nachtragen: Produktseite → DevTools → Netzwerk
-> (Filter `graphql`) → „Verfügbarkeit im Markt" prüfen → den `sha256Hash` aus
-> dem `GetProductAvailabilities`-Request kopieren. Die **Online-Verfügbarkeit**
-> bleibt davon unberührt und ist der zuverlässige Teil.
-
-## Lokal testen
+## Local Setup
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-# Trockenlauf: zeigt gefundene Angebote + Telegram-Vorschau, sendet nichts
-python -m tracker.run --dry-run -v
-
-# Telegram-Test (Secrets als ENV setzen)
-export TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=...
-python -m tracker.notify --test
-
-# Tests
+pip install pytest
+python -m playwright install chromium
 python -m pytest -q
+python -m tracker.run --dry-run -v
 ```
 
-## Scharf schalten
-Sind Secrets und mindestens eine Produkt-URL gesetzt, läuft der Workflow
-automatisch alle 10 Minuten. Manuell anstoßen: **Actions → „Midea PortaSplit
-Verfügbarkeit" → Run workflow**. Sobald das Gerät unter 1000 € bestellbar ist,
-kommt die Push aufs Handy.
+On Windows PowerShell:
 
-Wenn deine Actions nicht automatisch starten, nutze einen externen Dienst, der deinen Workflow per workflow_dispatch via API-Call auslöst.
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+pip install pytest
+python -m playwright install chromium
+python -m pytest -q
+python -m tracker.run --dry-run -v
+```
 
-Das umgeht das Fork-Limit komplett.
+To test Telegram locally, set the environment variables and run:
 
- Einrichtung:
- 
-  Erstelle ein Personal Access Token (PAT) in GitHub unter Settings -> Developer Settings -> Personal Access Tokens (Tokens (classic)). Gib ihm repo Rechte.
- 
-  Erstelle bei cron-job.org einen neuen Job.
-  
-  Nutze die GitHub API als URL (Tausche deinen Usernamen aus): `https://api.github.com/repos/DEIN_USERNAME/MideaHavara/actions/workflows/check.yml/dispatches`
-     
-  Setze als Header:
-  
-  `Authorization` `token DEIN_PAT`
-  `Accept` `application/vnd.github.v3+json`
-  `Content-Type` `application/json`
-  
-  (Ersetze DEIN_PERSONAL_ACCESS_TOKEN durch den Token, den du in den Developer Settings generiert hast. Beachte das Leerzeichen nach dem Wort "token".)
-        
-  **Setze als Body (POST):** `{"ref": "claude/midea-availability-tracker-jlunla"}`
+```bash
+export TELEGRAM_BOT_TOKEN="..."
+export TELEGRAM_CHAT_ID="..."
+python -m tracker.notify --test
+```
 
-Damit triggerst du den Workflow von außen alle 10 Minuten. GitHub sieht dies als manuellen Request und führt ihn garantiert aus.
+## Raspberry Pi Setup
 
-## Hinweise
-- Rein **privater** Gebrauch, niedrige Frequenz, klarer User-Agent. Manche
-  Shops blocken Bots – dafür gibt es einen **Browser-Fallback** (Playwright/
-  Chromium), der in GitHub Actions automatisch genutzt wird.
-- Fällt eine Quelle aus, laufen die anderen weiter (Fehler werden nur geloggt).
-- Selektoren einzelner Shops können sich ändern; primär werden stabile
-  **schema.org-JSON-LD-Daten** genutzt (`tracker/sources/jsonld.py`).
+Suggested install location on the Pi:
+
+```bash
+sudo mkdir -p /opt/mideahavara
+sudo chown -R joe:joe /opt/mideahavara
+git clone <your-repo-or-copy> /opt/mideahavara
+cd /opt/mideahavara
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+```
+
+If Playwright's bundled Chromium is not available on the Pi, install system
+Chromium and set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` in `.env`:
+
+```bash
+sudo apt update
+sudo apt install -y chromium
+cp .env.example .env
+nano .env
+```
+
+Example `.env`:
+
+```bash
+TELEGRAM_BOT_TOKEN=123456:real-token
+TELEGRAM_CHAT_ID=123456789
+PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium
+```
+
+Install the local timer:
+
+```bash
+sudo cp systemd/mideahavara.service /etc/systemd/system/
+sudo cp systemd/mideahavara.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mideahavara.timer
+```
+
+Useful commands:
+
+```bash
+systemctl list-timers mideahavara.timer
+sudo systemctl start mideahavara.service
+journalctl -u mideahavara.service -n 100 --no-pager
+```
+
+## Notes
+
+- `state.json` stores already-alerted offers and daily heartbeat markers.
+- Run `python -m tracker.run --dry-run -v` before enabling the timer.
+- Some shops may block automated checks. The tracker falls back to Playwright
+  where possible, but each source is best effort.

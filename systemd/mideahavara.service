@@ -1,0 +1,12 @@
+[Unit]
+Description=MideaHavara availability check
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=joe
+Group=joe
+WorkingDirectory=/opt/mideahavara
+EnvironmentFile=/opt/mideahavara/.env
+ExecStart=/opt/mideahavara/.venv/bin/python -m tracker.run

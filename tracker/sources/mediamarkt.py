@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from ..config import Config, Product, Store
 from ..models import CHANNEL_ONLINE, CHANNEL_STORE, CONDITION_NEW, Offer
@@ -25,7 +25,15 @@ from .jsonld import extract_products
 
 log = logging.getLogger(__name__)
 
-_DOMAINS = {"mediamarkt": "www.mediamarkt.de", "saturn": "www.saturn.de"}
+_DOMAINS = {
+    "mediamarkt": {
+        "DE": "www.mediamarkt.de",
+        "AT": "www.mediamarkt.at",
+    },
+    "saturn": {
+        "DE": "www.saturn.de",
+    },
+}
 _SALESLINE = {"mediamarkt": "Media", "saturn": "Saturn"}
 
 # Persisted-Query-Hash der GetProductAvailabilities-Operation.
@@ -132,6 +140,20 @@ def _extract_product_id(url: str) -> str | None:
     return digits or None
 
 
+def _market_context(chain: str, url: str) -> tuple[str, str, str]:
+    """Return GraphQL domain, country, and language for the product URL."""
+    host = urlparse(url).netloc.lower()
+    if host.endswith("mediamarkt.at"):
+        return _DOMAINS["mediamarkt"]["AT"], "AT", "de"
+    if host.endswith("mediamarkt.de"):
+        return _DOMAINS["mediamarkt"]["DE"], "DE", "de"
+    if host.endswith("saturn.de"):
+        return _DOMAINS["saturn"]["DE"], "DE", "de"
+
+    domain = _DOMAINS.get(chain, {}).get("DE", "www.mediamarkt.de")
+    return domain, "DE", "de"
+
+
 def _store_offers(
     cfg: Config, product: Product, chain: str, url: str, online_price: float | None
 ) -> list[Offer]:
@@ -140,15 +162,15 @@ def _store_offers(
     if not stores or not product_id:
         return []
 
-    domain = _DOMAINS[chain]
+    domain, country, language = _market_context(chain, url)
     endpoint = f"https://{domain}/api/v1/graphql"
     params = {
         "operationName": "GetProductAvailabilities",
         "variables": f'{{"ids":["{product_id}"]}}',
         "extensions": (
-            '{"pwa":{"salesLine":"%s","country":"DE","language":"de"},'
+            '{"pwa":{"salesLine":"%s","country":"%s","language":"%s"},'
             '"persistedQuery":{"version":1,"sha256Hash":"%s"}}'
-            % (_SALESLINE[chain], _AVAIL_QUERY_HASH)
+            % (_SALESLINE[chain], country, language, _AVAIL_QUERY_HASH)
         ),
     }
     headers = browser_headers({

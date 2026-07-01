@@ -1,0 +1,11 @@
+[Unit]
+Description=Run MideaHavara availability check every 10 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Persistent=true
+Unit=mideahavara.service
+
+[Install]
+WantedBy=timers.target

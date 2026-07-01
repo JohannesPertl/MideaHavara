@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import random
 import re
 import time
@@ -121,6 +122,21 @@ if (_q) { navigator.permissions.query = (p) => (
 ); }
 """
 
+
+def _launch_chromium(pw):
+    launch_options = {
+        "headless": True,
+        "args": [
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-blink-features=AutomationControlled",
+        ],
+    }
+    executable = os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE")
+    if executable:
+        launch_options["executable_path"] = executable
+    return pw.chromium.launch(**launch_options)
+
 # Marker einer Bot-Wall / Challenge-Seite (dann nachladen statt aufgeben).
 _CHALLENGE_MARKERS = (
     "just a moment",
@@ -162,14 +178,7 @@ def fetch_html_via_browser(
     ua = random.choice(_USER_AGENTS)
     try:
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-blink-features=AutomationControlled",
-                ],
-            )
+            browser = _launch_chromium(pw)
             ctx = browser.new_context(
                 user_agent=ua,
                 locale="de-DE",
@@ -245,14 +254,7 @@ def fetch_json_via_browser(
     ua = random.choice(_USER_AGENTS)
     try:
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-blink-features=AutomationControlled",
-                ],
-            )
+            browser = _launch_chromium(pw)
             ctx = browser.new_context(
                 user_agent=ua,
                 locale="de-DE",

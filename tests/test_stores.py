@@ -10,6 +10,7 @@ from tracker.models import CHANNEL_STORE
 from tracker.sources import mediamarkt
 
 URL = "https://www.mediamarkt.de/de/product/_midea-porta-split-142245268.html"
+AT_URL = "https://www.mediamarkt.at/de/product/_midea-portasplit-mobile-klimaanlage-2075674.html"
 
 
 def _cfg(stores: list[Store]) -> Config:
@@ -90,6 +91,25 @@ def test_browser_fallback_used_when_http_blocked(monkeypatch):
     # Die API-URL trägt die Produkt-ID, der Referer ist die Produktseite.
     assert "142245268" in captured["url"]
     assert captured["referer"] == URL
+
+
+def test_austrian_product_url_uses_at_graphql_context(monkeypatch):
+    store = Store(chain="mediamarkt", id="672", name="Graz Lazarettguertel", lat=47.0617, lon=15.4167)
+    cfg = _cfg([store])
+
+    captured = {}
+
+    def fake_json(endpoint, **kwargs):
+        captured["endpoint"] = endpoint
+        captured["params"] = kwargs.get("params") or {}
+        return {"data": {"availabilities": []}}
+
+    monkeypatch.setattr(mediamarkt, "http_get_json", fake_json)
+
+    offers = mediamarkt._store_offers(cfg, cfg.product, "mediamarkt", AT_URL, online_price=899.0)
+    assert offers == []
+    assert captured["endpoint"] == "https://www.mediamarkt.at/api/v1/graphql"
+    assert '"country":"AT"' in captured["params"]["extensions"]
 
 
 def test_store_not_in_stock_no_offer(monkeypatch):

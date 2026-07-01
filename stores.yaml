@@ -1,47 +1,31 @@
-# Filialen im 25-km-Umkreis von 74321 Bietigheim-Bissingen.
+# Store list for the 25-km radius around Graz.
 #
-# Je Eintrag:
-#   id            ketteninterne Store-ID für die Bestandsabfrage. DARF leer
-#                 bleiben – dann ist die Filiale recherchiert, wird aber bis
-#                 zum Nachtragen der ID übersprungen (kein Fehlalarm).
-#   name          Anzeigename (Telegram/Logs).
-#   lat/lon       Koordinaten der Filiale. Fehlt distance_km, wird die
-#                 Entfernung daraus + den Koordinaten in config.yaml berechnet.
-#   distance_km   optional fest vorgeben (überschreibt die Berechnung).
+# Only MediaMarkt/Saturn store checks use this file today. OBI, BAUHAUS and
+# Hornbach are checked as online product pages by their adapters.
 #
-# Aktuell liefern nur die MediaMarkt-/Saturn-Adapter einen Filialbestand
-# (GraphQL-API). OBI/Bauhaus/Hornbach prüfen bisher nur Online-Verfügbarkeit –
-# ihre Filiallisten sind hier als Platzhalter vorbereitet.
-#
-# So an die MediaMarkt/Saturn-Store-ID kommen: Store-Finder öffnen
-# (https://www.mediamarkt.de/de/store/store-finder), Filiale wählen, die Zahl am
-# Ende der Store-URL (…/store/<NAME>-<ID>) ist die ID. Diese bei `id:` eintragen.
-# Die Koordinaten sind grobe Filialstandorte (für die Distanzberechnung) – bei
-# Bedarf verfeinern. Alle vier MediaMärkte liegen < 25 km (ca. 6–21 km).
+# MediaMarkt IDs come from the final number in the Austrian store URL, e.g.
+# https://www.mediamarkt.at/de/store/graz-lazarettguertel-672 -> 672.
+# Coordinates are approximate store locations used only for distance display.
 
 mediamarkt:
-  - id: "450"         # mediamarkt.de/de/store/ludwigsburg-450  (~6 km)
-    name: "Ludwigsburg"
-    lat: 48.9080
-    lon: 9.1720
-  - id: "402"         # …/store/stuttgart-feuerbach-402  (~16 km)
-    name: "Stuttgart-Feuerbach"
-    lat: 48.8090
-    lon: 9.1570
-  - id: "31"          # …/store/leonberg-31  (~19 km)
-    name: "Leonberg"
-    lat: 48.8010
-    lon: 9.0180
-  - id: "527"         # …/store/heilbronn-527  (~21 km)
-    name: "Heilbronn"
-    lat: 49.1370
-    lon: 9.2200
+  - id: "672"
+    name: "Graz Lazarettguertel"
+    lat: 47.0617
+    lon: 15.4167
+  - id: "849"
+    name: "Graz Liebenau"
+    lat: 47.0416
+    lon: 15.4655
+  - id: "666"
+    name: "Graz Shopping Nord"
+    lat: 47.1059
+    lon: 15.4205
+  - id: "659"
+    name: "Graz Shopping City Seiersberg"
+    lat: 47.0116
+    lon: 15.3995
 
-# Für Saturn-Filialen analog die ID aus saturn.de/de/store/<name>-<ID> eintragen.
 saturn: []
-
 obi: []
-
 bauhaus: []
-
 hornbach: []
