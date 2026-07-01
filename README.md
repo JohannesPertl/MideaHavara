@@ -93,6 +93,25 @@ sudo systemctl enable --now mideahavara.timer
 The timer starts automatically after boot and runs the one-shot service every
 4 minutes.
 
+The optional bot command poller runs once per minute and handles Telegram
+commands:
+
+```bash
+sudo cp systemd/mideahavara-bot.service /etc/systemd/system/
+sudo cp systemd/mideahavara-bot.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mideahavara-bot.timer
+python -m tracker.bot --set-commands
+```
+
+Supported Telegram commands:
+
+- `/status` - quick tracker summary
+- `/stores` - active shops and MediaMarkt stores
+- `/check` - run a live check and send the result
+- `/test` - reply test
+- `/help` - command list
+
 Useful commands:
 
 ```bash

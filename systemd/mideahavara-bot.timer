@@ -1,0 +1,11 @@
+[Unit]
+Description=Poll MideaHavara Telegram bot commands every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+Persistent=true
+Unit=mideahavara-bot.service
+
+[Install]
+WantedBy=timers.target

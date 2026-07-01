@@ -1,0 +1,12 @@
+[Unit]
+Description=MideaHavara Telegram bot command poll
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=joe
+Group=joe
+WorkingDirectory=/home/joe/mideahavara
+EnvironmentFile=/home/joe/mideahavara/.env
+ExecStart=/home/joe/mideahavara/.venv/bin/python -m tracker.bot
