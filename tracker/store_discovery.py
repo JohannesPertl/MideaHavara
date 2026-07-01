@@ -20,6 +20,7 @@ USER_AGENT = "MideaHavara/1.0 (private availability tracker)"
 STORE_FINDER_URL = "https://www.mediamarkt.at/de/store/store-finder"
 STORE_URL = "https://www.mediamarkt.at/de/store/{uid}"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+SAME_AREA_DISTANCE_KM = 2.0
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,18 @@ def _load_yaml(path: Path) -> dict:
 
 def _save_yaml(path: Path, data: dict) -> None:
     path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+def _area_key(name: str) -> str:
+    key = name.split(",", 1)[0].strip().casefold()
+    key = re.sub(r"\s+", " ", key)
+    return key
+
+
+def _same_area(left: Area, right: Area) -> bool:
+    if _area_key(left.name) == _area_key(right.name):
+        return True
+    return haversine_km(left.latitude, left.longitude, right.latitude, right.longitude) <= SAME_AREA_DISTANCE_KM
 
 
 def _hydration_json(html: str) -> dict | None:
@@ -247,7 +260,7 @@ def save_areas_and_stores(
 def add_area_and_refresh(name: str, radius_km: float) -> tuple[Area, list[DiscoveredStore]]:
     geocoded = geocode_area(name)
     new_area = Area(geocoded.name, geocoded.latitude, geocoded.longitude, radius_km)
-    areas = [area for area in config_areas() if area.name != new_area.name]
+    areas = [area for area in config_areas() if not _same_area(area, new_area)]
     areas.append(new_area)
     stores = discover_mediamarkt_stores(areas)
     save_areas_and_stores(areas, stores)

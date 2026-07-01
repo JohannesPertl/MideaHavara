@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from tracker.store_discovery import Area, _hydration_json, _jsonld_geo, config_areas, remove_area_and_refresh
+from tracker.store_discovery import Area, _hydration_json, _jsonld_geo, add_area_and_refresh, config_areas, remove_area_and_refresh
 
 
 def test_hydration_json_decodes_router_data():
@@ -47,3 +47,20 @@ def test_remove_area_rejects_bad_index(monkeypatch):
 
     with pytest.raises(ValueError):
         remove_area_and_refresh(2)
+
+
+def test_add_area_replaces_same_place(monkeypatch):
+    saved = {}
+    monkeypatch.setattr("tracker.store_discovery.geocode_area", lambda name: Area("Graz, Steiermark, Österreich", 47.0707, 15.4395, 0))
+    monkeypatch.setattr(
+        "tracker.store_discovery.config_areas",
+        lambda: [Area("Graz, Steiermark, Österreich", 47.0707, 15.4395, 25)],
+    )
+    monkeypatch.setattr("tracker.store_discovery.discover_mediamarkt_stores", lambda areas: [])
+    monkeypatch.setattr("tracker.store_discovery.save_areas_and_stores", lambda areas, stores: saved.update({"areas": areas, "stores": stores}))
+
+    area, _ = add_area_and_refresh("Graz", 50)
+
+    assert area.radius_km == 50
+    assert len(saved["areas"]) == 1
+    assert saved["areas"][0].radius_km == 50
