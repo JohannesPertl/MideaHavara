@@ -417,6 +417,9 @@ def _handle_command(cfg: Config, secrets: Secrets, command: str, message_id: int
         send_telegram(_set_radius(_command_args(text)), secrets, reply_to_message_id=message_id)
         return
     if command == "/test":
+        send_telegram("Unbekanntes Kommando. Nutze /help.", secrets, reply_to_message_id=message_id)
+        return
+    if command == "/test":
         send_telegram(
             "✅ Bot-Antwort funktioniert.",
             secrets,
