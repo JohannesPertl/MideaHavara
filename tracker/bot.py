@@ -71,7 +71,7 @@ def _add_mediamarkt_store(args: list[str]) -> str:
     if len(args) < 4:
         return (
             "Syntax:\n"
-            "/addstore <id> <lat> <lon> <name>\n\n"
+            "/addstore ID LAT LON NAME\n\n"
             "Beispiel:\n"
             "/addstore 672 47.0617 15.4167 Graz Lazarettguertel"
         )
@@ -109,7 +109,7 @@ def _add_mediamarkt_store(args: list[str]) -> str:
 
 def _remove_mediamarkt_store(args: list[str]) -> str:
     if len(args) != 1:
-        return "Syntax: /removestore <id>"
+        return "Syntax: /removestore ID"
     store_id = args[0]
     data = _load_yaml(STORES_PATH)
     stores = list(data.get("mediamarkt") or [])
@@ -123,7 +123,7 @@ def _remove_mediamarkt_store(args: list[str]) -> str:
 
 def _set_radius(args: list[str]) -> str:
     if len(args) != 1:
-        return "Syntax: /radius <km>, z.B. /radius 80"
+        return "Syntax: /radius KM, z.B. /radius 80"
     try:
         radius = float(args[0].replace(",", "."))
     except ValueError:
@@ -143,7 +143,7 @@ def _area_command(args: list[str]) -> str:
     if len(args) < 2:
         return (
             "Syntax:\n"
-            "/area <Ort> <Radius-km>\n\n"
+            "/area ORT RADIUS-KM\n\n"
             "Beispiele:\n"
             "/area Graz 25\n"
             "/area Wien 40\n"
@@ -180,18 +180,18 @@ def _area_command(args: list[str]) -> str:
 def _areas_command() -> str:
     areas = config_areas()
     if not areas:
-        return "Keine Areas konfiguriert. Nutze /area <Ort> <Radius-km>."
+        return "Keine Areas konfiguriert. Nutze /area ORT RADIUS-KM."
     lines = ["<b>Konfigurierte Areas</b>"]
     for i, area in enumerate(areas, start=1):
         lines.append(f"{i}. {html.escape(area.name)} ({area.radius_km:.0f} km)")
     lines.append("")
-    lines.append("Entfernen mit /removearea <nummer>, z.B. /removearea 2")
+    lines.append("Entfernen mit /removearea NUMMER, z.B. /removearea 2")
     return "\n".join(lines)
 
 
 def _remove_area_command(args: list[str]) -> str:
     if len(args) != 1:
-        return "Syntax: /removearea <nummer>. Nutze /areas fuer die Nummern."
+        return "Syntax: /removearea NUMMER. Nutze /areas fuer die Nummern."
     try:
         index = int(args[0])
     except ValueError:
@@ -333,7 +333,6 @@ def _status_report(cfg: Config) -> str:
         "/areas - konfigurierte Areas anzeigen\n"
         "/removearea - einzelne Area entfernen\n"
         "/clearareas - Areas und Stores leeren\n"
-        "/test - Antworttest senden\n"
         "/help - Hilfe anzeigen"
     )
 
@@ -344,11 +343,10 @@ def _help_text() -> str:
         "/status - schnelle Statusuebersicht\n"
         "/stores - aktive Quellen und MediaMarkt-Filialen\n"
         "/check - Live-Check ausfuehren und Ergebnis melden\n"
-        "/area <Ort> <Radius-km> - Stores automatisch finden\n"
+        "/area ORT RADIUS-KM - Stores automatisch finden\n"
         "/areas - konfigurierte Areas anzeigen\n"
-        "/removearea <nummer> - einzelne Area entfernen\n"
+        "/removearea NUMMER - einzelne Area entfernen\n"
         "/clearareas - Areas und Stores leeren\n"
-        "/test - Bot-Antwort testen\n"
         "/help - diese Hilfe"
     )
 
@@ -366,7 +364,6 @@ def _set_commands(secrets: Secrets) -> bool:
         {"command": "areas", "description": "Konfigurierte Areas anzeigen"},
         {"command": "removearea", "description": "Einzelne Area entfernen"},
         {"command": "clearareas", "description": "Areas und Stores leeren"},
-        {"command": "test", "description": "Antworttest senden"},
         {"command": "help", "description": "Hilfe anzeigen"},
     ]
     resp = requests.post(url, json={"commands": commands}, timeout=TIMEOUT)

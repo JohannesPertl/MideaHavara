@@ -8,6 +8,8 @@ from tracker.bot import (
     _remove_mediamarkt_store,
     _remove_area_command,
     _set_radius,
+    _help_text,
+    _set_commands,
     _stores_report,
 )
 from tracker.config import Config, Location, Product, Store
@@ -101,7 +103,8 @@ def test_areas_and_clear_commands(monkeypatch):
 
     areas_msg = _areas_command()
     assert "1. Graz" in areas_msg
-    assert "/removearea <nummer>" in areas_msg
+    assert "/removearea NUMMER" in areas_msg
+    assert "<nummer>" not in areas_msg
     assert "entfernt" in _clear_areas_command()
     assert cleared["ok"] is True
 
@@ -117,3 +120,34 @@ def test_remove_area_command(monkeypatch):
 
     assert "Area entfernt: Wien" in msg
     assert "verbleibend: 1" in msg
+
+
+def test_help_has_no_invalid_html_placeholders():
+    msg = _help_text()
+
+    assert "/area ORT RADIUS-KM" in msg
+    assert "/removearea NUMMER" in msg
+    assert "<Ort>" not in msg
+    assert "<nummer>" not in msg
+    assert "/test" not in msg
+
+
+def test_set_commands_does_not_advertise_test(monkeypatch):
+    captured = {}
+
+    class Resp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"ok": True}
+
+    def fake_post(url, json, timeout):
+        captured["json"] = json
+        return Resp()
+
+    monkeypatch.setattr("tracker.bot.requests.post", fake_post)
+
+    assert _set_commands(type("Secrets", (), {"telegram_configured": True, "telegram_bot_token": "tok"})()) is True
+    commands = [item["command"] for item in captured["json"]["commands"]]
+    assert "test" not in commands
