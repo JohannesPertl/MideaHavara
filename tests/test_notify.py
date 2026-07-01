@@ -1,8 +1,11 @@
 """Tests für die Telegram-Nachricht: HTML-Escaping + Produkt-Gruppierung."""
 
 from tracker.models import CHANNEL_ONLINE, CHANNEL_STORE, CONDITION_NEW, CONDITION_USED, Offer
-from tracker.config import Secrets
-from tracker.notify import format_offers, latest_message_id, send_telegram
+from datetime import datetime, timezone
+
+from tracker.config import Config, Location, Product, Secrets, Store
+from tracker.notify import format_offers, format_status_report, latest_message_id, send_telegram
+from tracker.run import RunSummary
 
 
 def _offer(**kw) -> Offer:
@@ -101,3 +104,27 @@ def test_latest_message_id_uses_configured_chat(monkeypatch):
     secrets = Secrets(telegram_bot_token="tok", telegram_chat_id="123")
 
     assert latest_message_id(secrets) == 3
+
+
+def test_status_report_lists_sources_and_stores():
+    cfg = Config(
+        products=[Product("Midea PortaSplit 12.000 BTU", ["4048164116478"], ["portasplit"], [], 1000, True)],
+        location=Location("8010", "Graz", 47.0707, 15.4395, 25),
+        sources={"geizhals": True, "mediamarkt": True, "obi": True, "bauhaus": True},
+        stores={
+            "mediamarkt": [
+                Store("mediamarkt", "672", "Graz Lazarettguertel"),
+                Store("mediamarkt", "849", "Graz Liebenau"),
+            ]
+        },
+    )
+    summary = RunSummary(attempts=4, sources_with_data=2, buyable_count=0)
+
+    msg = format_status_report(cfg, summary, datetime(2026, 7, 1, 16, 0, tzinfo=timezone.utc))
+
+    assert "Graz 8010" in msg
+    assert "MediaMarkt AT - Online + Filialbestand" in msg
+    assert "OBI AT - Online-Produktseite" in msg
+    assert "Graz Lazarettguertel (ID 672)" in msg
+    assert "Graz Liebenau (ID 849)" in msg
+    assert "Quellen mit Daten: 2/4" in msg

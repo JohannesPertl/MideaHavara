@@ -144,6 +144,59 @@ def format_outage(summary) -> str:
     )
 
 
+def format_status_report(cfg, summary, now) -> str:
+    """On-demand status report with configured checks and latest run result."""
+    ts = now.strftime("%d.%m.%Y %H:%M UTC")
+    loc = cfg.location
+    lines = [
+        f"✅ <b>Tracker-Status</b> - {ts}",
+        f"Standort: {html.escape(loc.city)} {html.escape(loc.postal_code)} "
+        f"({loc.radius_km:.0f} km Umkreis)",
+        "",
+        "<b>Beobachtete Produkte</b>",
+    ]
+    for product in cfg.products:
+        lines.append(f"• {html.escape(product.name)} bis <b>{product.max_price:.2f} €</b>")
+
+    lines.extend(["", "<b>Aktive Quellen</b>"])
+    labels = {
+        "geizhals": "Geizhals AT - Online/Preisvergleich",
+        "mediamarkt": "MediaMarkt AT - Online + Filialbestand",
+        "obi": "OBI AT - Online-Produktseite",
+        "bauhaus": "BAUHAUS AT - Online-Produktseite",
+        "idealo": "Idealo",
+        "saturn": "Saturn",
+        "hornbach": "Hornbach",
+        "amazon": "Amazon",
+        "greensun": "Greensun",
+    }
+    for source in cfg.enabled_sources():
+        lines.append(f"• {html.escape(labels.get(source, source))}")
+
+    mediamarkt_stores = [s for s in cfg.stores_for("mediamarkt") if s.id]
+    if mediamarkt_stores:
+        lines.extend(["", "<b>MediaMarkt-Filialen im Check</b>"])
+        for store in mediamarkt_stores:
+            lines.append(f"• {html.escape(store.name)} (ID {html.escape(store.id)})")
+
+    lines.extend(
+        [
+            "",
+            "<b>Letzter Live-Check</b>",
+            f"Quellen mit Daten: {summary.sources_with_data}/{summary.attempts}",
+            f"Bestellbar im Budget: {summary.buyable_count}",
+        ]
+    )
+    if summary.best_by_product:
+        for name, (price, merchant) in sorted(summary.best_by_product.items()):
+            lines.append(f"• {html.escape(name)}: {price:.2f} € bei {html.escape(merchant)}")
+    else:
+        lines.append("Kein Preis fuer das beobachtete Produkt gefunden.")
+    lines.append("")
+    lines.append("Hinweis: OBI/BAUHAUS werden aktuell online geprueft; Filialbestand nur MediaMarkt.")
+    return "\n".join(lines)
+
+
 def _self_test() -> int:
     """`python -m tracker.notify --test` schickt eine Testnachricht."""
     logging.basicConfig(level=logging.INFO)

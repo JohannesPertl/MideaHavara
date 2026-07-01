@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from .config import Config, Product, Secrets, load_config
 from .matching import is_buyable, matches_product
 from .models import CHANNEL_ONLINE, CONDITION_NEW, Offer
-from .notify import format_heartbeat, format_offers, format_outage, send_telegram
+from .notify import format_heartbeat, format_offers, format_outage, format_status_report, send_telegram
 from .sources import get_source
 from .state import diff_new, load_state, save_state
 
@@ -152,6 +152,25 @@ def run(dry_run: bool = False) -> int:
     return 0
 
 
+def run_status_report() -> int:
+    """Runs a live check and sends a Telegram report without changing alert state."""
+    cfg = load_config()
+    secrets = Secrets.from_env()
+
+    names = ", ".join(p.name for p in cfg.products)
+    log.info("Starte Status-Check fuer %d Produkt(e) [%s] (Quellen: %s)",
+             len(cfg.products), names, ", ".join(cfg.enabled_sources()))
+
+    _, summary = collect_buyable(cfg)
+    message = format_status_report(cfg, summary, datetime.now(timezone.utc))
+    ok = send_telegram(message, secrets)
+    if ok:
+        log.info("Statusbericht gesendet.")
+        return 0
+    log.error("Statusbericht konnte nicht gesendet werden.")
+    return 1
+
+
 def run_demo() -> int:
     """Schickt einen einmaligen Beispiel-Alarm im echten Format (Funktionstest)."""
     cfg = load_config()
@@ -182,6 +201,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Midea PortaSplit Verfügbarkeits-Check")
     parser.add_argument("--dry-run", action="store_true", help="Nur loggen, nichts senden/schreiben")
     parser.add_argument("--demo", action="store_true", help="Einmaligen Beispiel-Alarm an Telegram senden")
+    parser.add_argument("--status-report", action="store_true", help="Live-Statusbericht an Telegram senden")
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug-Logging")
     args = parser.parse_args(argv)
 
@@ -192,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.demo:
         return run_demo()
+    if args.status_report:
+        return run_status_report()
     return run(dry_run=args.dry_run)
 
 
