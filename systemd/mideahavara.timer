@@ -1,9 +1,9 @@
 [Unit]
-Description=Run MideaHavara availability check every 10 minutes
+Description=Run MideaHavara availability check every 4 minutes
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=10min
+OnUnitActiveSec=4min
 Persistent=true
 Unit=mideahavara.service
 

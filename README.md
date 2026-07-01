@@ -90,6 +90,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now mideahavara.timer
 ```
 
+The timer starts automatically after boot and runs the one-shot service every
+4 minutes.
+
 Useful commands:
 
 ```bash
