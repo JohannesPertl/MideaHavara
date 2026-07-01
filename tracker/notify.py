@@ -15,24 +15,28 @@ from .models import CHANNEL_STORE, CONDITION_NEW, Offer
 log = logging.getLogger(__name__)
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
+TELEGRAM_UPDATES_API = "https://api.telegram.org/bot{token}/getUpdates"
 TIMEOUT = 20
 
 
-def send_telegram(text: str, secrets: Secrets) -> bool:
+def send_telegram(text: str, secrets: Secrets, *, reply_to_message_id: int | None = None) -> bool:
     """Sendet eine Nachricht. Gibt True bei Erfolg zurück."""
     if not secrets.telegram_configured:
         log.warning("Telegram nicht konfiguriert (Token/Chat-ID fehlen) – überspringe Versand.")
         return False
     url = TELEGRAM_API.format(token=secrets.telegram_bot_token)
+    payload = {
+        "chat_id": secrets.telegram_chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": False,
+    }
+    if reply_to_message_id is not None:
+        payload["reply_parameters"] = {"message_id": reply_to_message_id}
     try:
         resp = requests.post(
             url,
-            json={
-                "chat_id": secrets.telegram_chat_id,
-                "text": text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": False,
-            },
+            json=payload,
             timeout=TIMEOUT,
         )
         resp.raise_for_status()
@@ -40,6 +44,32 @@ def send_telegram(text: str, secrets: Secrets) -> bool:
         log.error("Telegram-Versand fehlgeschlagen: %s", exc)
         return False
     return True
+
+
+def latest_message_id(secrets: Secrets) -> int | None:
+    """Return the latest message id in the configured chat, if getUpdates has one."""
+    if not secrets.telegram_configured:
+        log.warning("Telegram nicht konfiguriert (Token/Chat-ID fehlen).")
+        return None
+    url = TELEGRAM_UPDATES_API.format(token=secrets.telegram_bot_token)
+    try:
+        resp = requests.get(url, timeout=TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError) as exc:
+        log.error("Telegram-getUpdates fehlgeschlagen: %s", exc)
+        return None
+    if not data.get("ok"):
+        log.error("Telegram-getUpdates meldete Fehler: %s", data)
+        return None
+
+    chat_id = str(secrets.telegram_chat_id)
+    for update in reversed(data.get("result") or []):
+        msg = update.get("message") if isinstance(update, dict) else None
+        chat = msg.get("chat") if isinstance(msg, dict) else None
+        if str((chat or {}).get("id")) == chat_id and msg.get("message_id") is not None:
+            return int(msg["message_id"])
+    return None
 
 
 def _offer_line(o: Offer) -> list[str]:
@@ -126,7 +156,26 @@ def _self_test() -> int:
     return 0 if ok else 1
 
 
+def _reply_test() -> int:
+    """`python -m tracker.notify --reply-test` replies to the latest incoming chat message."""
+    logging.basicConfig(level=logging.INFO)
+    secrets = Secrets.from_env()
+    message_id = latest_message_id(secrets)
+    if message_id is None:
+        print("Keine passende Telegram-Nachricht gefunden. Sende dem Bot zuerst /start oder hi.")
+        return 1
+    ok = send_telegram(
+        "✅ Reply-Test vom Midea PortaSplit Tracker - Bot-Verbindung funktioniert.",
+        secrets,
+        reply_to_message_id=message_id,
+    )
+    print("Reply gesendet." if ok else "Reply fehlgeschlagen (siehe Log / Secrets prüfen).")
+    return 0 if ok else 1
+
+
 if __name__ == "__main__":
+    if "--reply-test" in sys.argv:
+        raise SystemExit(_reply_test())
     if "--test" in sys.argv:
         raise SystemExit(_self_test())
-    print("Nutze: python -m tracker.notify --test")
+    print("Nutze: python -m tracker.notify --test oder --reply-test")

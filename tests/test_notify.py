@@ -1,7 +1,8 @@
 """Tests für die Telegram-Nachricht: HTML-Escaping + Produkt-Gruppierung."""
 
 from tracker.models import CHANNEL_ONLINE, CHANNEL_STORE, CONDITION_NEW, CONDITION_USED, Offer
-from tracker.notify import format_offers
+from tracker.config import Secrets
+from tracker.notify import format_offers, latest_message_id, send_telegram
 
 
 def _offer(**kw) -> Offer:
@@ -53,3 +54,50 @@ def test_store_offer_shows_distance():
 def test_used_condition_labeled():
     msg = format_offers([_offer(condition=CONDITION_USED, merchant="Amazon Warehouse")])
     assert "[Gebraucht]" in msg
+
+
+class _Resp:
+    def __init__(self, data=None):
+        self.data = data or {}
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self.data
+
+
+def test_send_telegram_can_reply(monkeypatch):
+    captured = {}
+
+    def fake_post(url, json, timeout):
+        captured["url"] = url
+        captured["json"] = json
+        captured["timeout"] = timeout
+        return _Resp()
+
+    monkeypatch.setattr("tracker.notify.requests.post", fake_post)
+    secrets = Secrets(telegram_bot_token="tok", telegram_chat_id="123")
+
+    assert send_telegram("hello", secrets, reply_to_message_id=42) is True
+    assert captured["json"]["chat_id"] == "123"
+    assert captured["json"]["reply_parameters"] == {"message_id": 42}
+
+
+def test_latest_message_id_uses_configured_chat(monkeypatch):
+    def fake_get(url, timeout):
+        return _Resp(
+            {
+                "ok": True,
+                "result": [
+                    {"message": {"message_id": 1, "chat": {"id": 999}}},
+                    {"message": {"message_id": 2, "chat": {"id": 123}}},
+                    {"message": {"message_id": 3, "chat": {"id": 123}}},
+                ],
+            }
+        )
+
+    monkeypatch.setattr("tracker.notify.requests.get", fake_get)
+    secrets = Secrets(telegram_bot_token="tok", telegram_chat_id="123")
+
+    assert latest_message_id(secrets) == 3
