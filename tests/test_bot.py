@@ -6,6 +6,7 @@ from tracker.bot import (
     _command_args,
     _command_from_text,
     _remove_mediamarkt_store,
+    _remove_area_command,
     _set_radius,
     _stores_report,
 )
@@ -98,6 +99,21 @@ def test_areas_and_clear_commands(monkeypatch):
     cleared = {"ok": False}
     monkeypatch.setattr("tracker.bot.clear_areas_and_refresh", lambda: cleared.__setitem__("ok", True))
 
-    assert "Graz" in _areas_command()
+    areas_msg = _areas_command()
+    assert "1. Graz" in areas_msg
+    assert "/removearea <nummer>" in areas_msg
     assert "entfernt" in _clear_areas_command()
     assert cleared["ok"] is True
+
+
+def test_remove_area_command(monkeypatch):
+    def fake_remove(index):
+        assert index == 2
+        return Area("Wien", 48.2, 16.3, 40), [DiscoveredStore("1", "Store", 48, 16, 2)]
+
+    monkeypatch.setattr("tracker.bot.remove_area_and_refresh", fake_remove)
+
+    msg = _remove_area_command(["2"])
+
+    assert "Area entfernt: Wien" in msg
+    assert "verbleibend: 1" in msg

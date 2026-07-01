@@ -254,5 +254,15 @@ def add_area_and_refresh(name: str, radius_km: float) -> tuple[Area, list[Discov
     return new_area, stores
 
 
+def remove_area_and_refresh(index: int) -> tuple[Area, list[DiscoveredStore]]:
+    areas = config_areas()
+    if index < 1 or index > len(areas):
+        raise ValueError(f"Area {index} gibt es nicht.")
+    removed = areas.pop(index - 1)
+    stores = discover_mediamarkt_stores(areas)
+    save_areas_and_stores(areas, stores)
+    return removed, stores
+
+
 def clear_areas_and_refresh() -> None:
     save_areas_and_stores([], [])

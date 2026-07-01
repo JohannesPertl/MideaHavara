@@ -21,7 +21,7 @@ import yaml
 from .config import CONFIG_PATH, ROOT, STORES_PATH, Config, Secrets, load_config
 from .notify import TIMEOUT, format_status_report, send_telegram
 from .run import collect_buyable
-from .store_discovery import add_area_and_refresh, clear_areas_and_refresh, config_areas
+from .store_discovery import add_area_and_refresh, clear_areas_and_refresh, config_areas, remove_area_and_refresh
 
 log = logging.getLogger(__name__)
 
@@ -182,9 +182,29 @@ def _areas_command() -> str:
     if not areas:
         return "Keine Areas konfiguriert. Nutze /area <Ort> <Radius-km>."
     lines = ["<b>Konfigurierte Areas</b>"]
-    for area in areas:
-        lines.append(f"• {html.escape(area.name)} ({area.radius_km:.0f} km)")
+    for i, area in enumerate(areas, start=1):
+        lines.append(f"{i}. {html.escape(area.name)} ({area.radius_km:.0f} km)")
+    lines.append("")
+    lines.append("Entfernen mit /removearea <nummer>, z.B. /removearea 2")
     return "\n".join(lines)
+
+
+def _remove_area_command(args: list[str]) -> str:
+    if len(args) != 1:
+        return "Syntax: /removearea <nummer>. Nutze /areas fuer die Nummern."
+    try:
+        index = int(args[0])
+    except ValueError:
+        return "Die Area-Nummer muss eine ganze Zahl sein. Nutze /areas."
+    try:
+        removed, stores = remove_area_and_refresh(index)
+    except Exception as exc:  # noqa: BLE001 - bot response should explain the failure
+        log.exception("Area removal failed")
+        return f"Area konnte nicht entfernt werden: {html.escape(str(exc))}"
+    return (
+        f"Area entfernt: {html.escape(removed.name)}.\n"
+        f"Automatisch gefundene MediaMarkt-Filialen verbleibend: {len(stores)}"
+    )
 
 
 def _clear_areas_command() -> str:
@@ -311,6 +331,7 @@ def _status_report(cfg: Config) -> str:
         "/check - echten Live-Check ausfuehren und Ergebnis senden\n"
         "/area - Ort + Radius setzen und Stores automatisch finden\n"
         "/areas - konfigurierte Areas anzeigen\n"
+        "/removearea - einzelne Area entfernen\n"
         "/clearareas - Areas und Stores leeren\n"
         "/test - Antworttest senden\n"
         "/help - Hilfe anzeigen"
@@ -325,6 +346,7 @@ def _help_text() -> str:
         "/check - Live-Check ausfuehren und Ergebnis melden\n"
         "/area <Ort> <Radius-km> - Stores automatisch finden\n"
         "/areas - konfigurierte Areas anzeigen\n"
+        "/removearea <nummer> - einzelne Area entfernen\n"
         "/clearareas - Areas und Stores leeren\n"
         "/test - Bot-Antwort testen\n"
         "/help - diese Hilfe"
@@ -342,6 +364,7 @@ def _set_commands(secrets: Secrets) -> bool:
         {"command": "check", "description": "Live-Check ausfuehren"},
         {"command": "area", "description": "Ort und Radius setzen"},
         {"command": "areas", "description": "Konfigurierte Areas anzeigen"},
+        {"command": "removearea", "description": "Einzelne Area entfernen"},
         {"command": "clearareas", "description": "Areas und Stores leeren"},
         {"command": "test", "description": "Antworttest senden"},
         {"command": "help", "description": "Hilfe anzeigen"},
@@ -375,6 +398,14 @@ def _handle_command(cfg: Config, secrets: Secrets, command: str, message_id: int
         return
     if command == "/areas":
         send_telegram(_areas_command(), secrets, reply_to_message_id=message_id)
+        return
+    if command == "/removearea":
+        send_telegram(
+            "⏳ Entferne Area und aktualisiere Stores.",
+            secrets,
+            reply_to_message_id=message_id,
+        )
+        send_telegram(_remove_area_command(_command_args(text)), secrets, reply_to_message_id=message_id)
         return
     if command == "/clearareas":
         send_telegram(_clear_areas_command(), secrets, reply_to_message_id=message_id)

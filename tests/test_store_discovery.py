@@ -1,6 +1,8 @@
 import json
 
-from tracker.store_discovery import _hydration_json, _jsonld_geo, config_areas
+import pytest
+
+from tracker.store_discovery import Area, _hydration_json, _jsonld_geo, config_areas, remove_area_and_refresh
 
 
 def test_hydration_json_decodes_router_data():
@@ -25,3 +27,23 @@ def test_config_areas_empty_list_disables_legacy_fallback(tmp_path):
     )
 
     assert config_areas(config_path) == []
+
+
+def test_remove_area_and_refresh(monkeypatch):
+    saved = {}
+    monkeypatch.setattr("tracker.store_discovery.config_areas", lambda: [Area("Graz", 47, 15, 25), Area("Wien", 48, 16, 40)])
+    monkeypatch.setattr("tracker.store_discovery.discover_mediamarkt_stores", lambda areas: [])
+    monkeypatch.setattr("tracker.store_discovery.save_areas_and_stores", lambda areas, stores: saved.update({"areas": areas, "stores": stores}))
+
+    removed, stores = remove_area_and_refresh(2)
+
+    assert removed.name == "Wien"
+    assert [a.name for a in saved["areas"]] == ["Graz"]
+    assert stores == []
+
+
+def test_remove_area_rejects_bad_index(monkeypatch):
+    monkeypatch.setattr("tracker.store_discovery.config_areas", lambda: [Area("Graz", 47, 15, 25)])
+
+    with pytest.raises(ValueError):
+        remove_area_and_refresh(2)

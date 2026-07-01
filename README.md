@@ -111,6 +111,7 @@ Supported Telegram commands:
 - `/check` - run a live check and send the result
 - `/area <Ort> <Radius-km>` - add an area and automatically find MediaMarkt stores
 - `/areas` - list configured areas
+- `/removearea <nummer>` - remove one configured area
 - `/clearareas` - clear configured areas and automatically found stores
 - `/test` - reply test
 - `/help` - command list
@@ -121,6 +122,7 @@ Example:
 /area Graz 25
 /area Wien 40
 /areas
+/removearea 2
 ```
 
 The bot geocodes the area, reads MediaMarkt AT's store finder, resolves store
