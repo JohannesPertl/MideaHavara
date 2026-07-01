@@ -56,10 +56,8 @@ python -m tracker.notify --test
 Suggested install location on the Pi:
 
 ```bash
-sudo mkdir -p /opt/mideahavara
-sudo chown -R joe:joe /opt/mideahavara
-git clone <your-repo-or-copy> /opt/mideahavara
-cd /opt/mideahavara
+git clone <your-repo-or-copy> ~/mideahavara
+cd ~/mideahavara
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.txt
